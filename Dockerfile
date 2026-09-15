@@ -11,8 +11,16 @@ COPY package.json ./
 # Install frontend dependencies
 RUN npm install
 
-# Copy application source
 COPY . .
+
+# Remove stale Laravel cache
+RUN rm -f bootstrap/cache/*.php
+
+# Rebuild Composer autoload and Laravel package discovery
+RUN composer dump-autoload --optimize --no-dev
+
+# Copy Vite Production Assets
+COPY --from=frontend /var/www/html/public/build ./public/build
 
 # Build Vite production assets
 RUN npm run build
