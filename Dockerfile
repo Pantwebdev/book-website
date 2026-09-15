@@ -5,23 +5,30 @@ FROM node:20-alpine AS frontend
 
 WORKDIR /var/www/html
 
+# Copy package files
 COPY package.json ./
 
+# Install frontend dependencies
 RUN npm install
 
+# Copy application source
 COPY . .
 
+# Build Vite production assets
 RUN npm run build
 
 
 # ==========================================
-# Stage 2: PHP-FPM + Composer dependencies
+# Stage 2: Laravel PHP-FPM Application
 # ==========================================
 FROM php:8.3-fpm AS app
 
 WORKDIR /var/www/html
 
-# Install system dependencies
+
+# ==========================================
+# Install System Dependencies
+# ==========================================
 RUN apt-get update && apt-get install -y \
     libpng-dev \
     libjpeg62-turbo-dev \
@@ -30,19 +37,25 @@ RUN apt-get update && apt-get install -y \
     libicu-dev \
     libxml2-dev \
     libonig-dev \
+    libsqlite3-dev \
     unzip \
     git \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+
+# ==========================================
 # Configure GD
+# ==========================================
 RUN docker-php-ext-configure gd \
     --with-freetype \
     --with-jpeg
 
-# Install PHP extensions
+
+# ==========================================
+# Install PHP Extensions
+# ==========================================
 RUN docker-php-ext-install \
-    pdo \
     pdo_mysql \
     pdo_sqlite \
     mbstring \
@@ -54,13 +67,22 @@ RUN docker-php-ext-install \
     intl \
     xml
 
+
+# ==========================================
 # Install Composer
+# ==========================================
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-# Copy Composer files first
+
+# ==========================================
+# Copy Composer Files
+# ==========================================
 COPY composer.json composer.lock ./
 
-# Install Laravel dependencies
+
+# ==========================================
+# Install Laravel Dependencies
+# ==========================================
 RUN composer install \
     --no-dev \
     --no-interaction \
@@ -68,13 +90,22 @@ RUN composer install \
     --optimize-autoloader \
     --no-scripts
 
-# Copy application source
+
+# ==========================================
+# Copy Laravel Application
+# ==========================================
 COPY . .
 
-# Copy Vite production assets
+
+# ==========================================
+# Copy Vite Production Assets
+# ==========================================
 COPY --from=frontend /var/www/html/public/build ./public/build
 
-# Create Laravel directories
+
+# ==========================================
+# Create Laravel Required Directories
+# ==========================================
 RUN mkdir -p \
     storage/framework/cache \
     storage/framework/sessions \
@@ -82,7 +113,10 @@ RUN mkdir -p \
     storage/logs \
     bootstrap/cache
 
-# Set Laravel permissions
+
+# ==========================================
+# Set Laravel Permissions
+# ==========================================
 RUN chown -R www-data:www-data \
     storage \
     bootstrap/cache
@@ -91,7 +125,14 @@ RUN chmod -R 775 \
     storage \
     bootstrap/cache
 
-# PHP-FPM
+
+# ==========================================
+# PHP-FPM Port
+# ==========================================
 EXPOSE 9000
 
+
+# ==========================================
+# Start PHP-FPM
+# ==========================================
 CMD ["php-fpm"]
