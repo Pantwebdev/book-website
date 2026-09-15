@@ -15,26 +15,9 @@ RUN npm run build
 
 
 # ==========================================
-# Stage 2: Install PHP dependencies
+# Stage 2: PHP-FPM + Composer dependencies
 # ==========================================
-FROM composer:2 AS composer
-
-WORKDIR /var/www/html
-
-COPY composer.json composer.lock ./
-
-RUN composer install \
-    --no-dev \
-    --no-interaction \
-    --prefer-dist \
-    --optimize-autoloader \
-    --no-scripts
-
-
-# ==========================================
-# Stage 3: PHP-FPM application
-# ==========================================
-FROM php:8.3-fpm
+FROM php:8.3-fpm AS app
 
 WORKDIR /var/www/html
 
@@ -57,7 +40,7 @@ RUN docker-php-ext-configure gd \
     --with-freetype \
     --with-jpeg
 
-# Install PHP extensions required by Laravel/packages
+# Install PHP extensions
 RUN docker-php-ext-install \
     pdo \
     pdo_mysql \
@@ -71,16 +54,27 @@ RUN docker-php-ext-install \
     intl \
     xml
 
-# Copy Composer dependencies
-COPY --from=composer /var/www/html/vendor ./vendor
+# Install Composer
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-# Copy application source code
+# Copy Composer files first
+COPY composer.json composer.lock ./
+
+# Install Laravel dependencies
+RUN composer install \
+    --no-dev \
+    --no-interaction \
+    --prefer-dist \
+    --optimize-autoloader \
+    --no-scripts
+
+# Copy application source
 COPY . .
 
 # Copy Vite production assets
 COPY --from=frontend /var/www/html/public/build ./public/build
 
-# Create Laravel required directories
+# Create Laravel directories
 RUN mkdir -p \
     storage/framework/cache \
     storage/framework/sessions \
@@ -88,7 +82,7 @@ RUN mkdir -p \
     storage/logs \
     bootstrap/cache
 
-# Set permissions
+# Set Laravel permissions
 RUN chown -R www-data:www-data \
     storage \
     bootstrap/cache
@@ -97,8 +91,7 @@ RUN chmod -R 775 \
     storage \
     bootstrap/cache
 
-# Laravel uses PHP-FPM on port 9000
+# PHP-FPM
 EXPOSE 9000
 
-# Start PHP-FPM
 CMD ["php-fpm"]
