@@ -1,0 +1,74 @@
+services:
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE:-books}
+      MYSQL_USER: ${DB_USERNAME:-books}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-books_secret}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_secret}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-root_secret}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  migrate:
+    build:
+      context: .
+    restart: "no"
+    env_file:
+      - .env
+    environment:
+      APP_ENV: ${APP_ENV:-local}
+      APP_KEY: ${APP_KEY}
+      DB_CONNECTION: mysql
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_DATABASE: ${DB_DATABASE:-books}
+      DB_USERNAME: ${DB_USERNAME:-books}
+      DB_PASSWORD: ${DB_PASSWORD:-books_secret}
+    depends_on:
+      db:
+        condition: service_healthy
+    command: php artisan migrate --force
+
+  app:
+    build:
+      context: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      APP_ENV: ${APP_ENV:-local}
+      APP_KEY: ${APP_KEY}
+      DB_CONNECTION: mysql
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_DATABASE: ${DB_DATABASE:-books}
+      DB_USERNAME: ${DB_USERNAME:-books}
+      DB_PASSWORD: ${DB_PASSWORD:-books_secret}
+    volumes:
+      - laravel-storage:/var/www/html/storage
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  web:
+    build:
+      context: .
+      target: web
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8080}:80"
+    volumes:
+      - laravel-storage:/var/www/html/public/storage:ro
+    depends_on:
+      - app
+
+volumes:
+  mysql-data:
+  laravel-storage:
